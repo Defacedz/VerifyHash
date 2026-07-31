@@ -1,0 +1,10 @@
+# Nothing here is built, but keep the usual suspects out anyway
+*.exe
+*.dll
+*.pdb
+bin/
+obj/
+
+# Windows clutter
+Thumbs.db
+desktop.ini
