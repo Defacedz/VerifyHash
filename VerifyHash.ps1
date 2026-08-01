@@ -124,6 +124,8 @@ $Strings = @{
         BtnInstall    = 'Install'
         BtnUninstall  = 'Uninstall'
         BtnClose      = 'Close'
+        ClipEmpty     = 'The clipboard holds no text'
+        ClipFailed    = 'Could not read the clipboard'
         Failed        = 'Failed: {0}'
     }
     fr = @{
@@ -156,6 +158,8 @@ $Strings = @{
         BtnInstall    = 'Installer'
         BtnUninstall  = 'Désinstaller'
         BtnClose      = 'Fermer'
+        ClipEmpty     = 'Le presse-papier ne contient pas de texte'
+        ClipFailed    = 'Lecture du presse-papier impossible'
         Failed        = 'Échec : {0}'
     }
 }
@@ -241,7 +245,6 @@ function New-Form($title, $w, $h) {
     $f.MinimizeBox     = $false
     $f.TopMost         = $true
     $f.KeyPreview      = $true
-    $f.DoubleBuffered  = $true
     $f.Add_KeyDown({ if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Escape) { $this.Close() } })
     $f.Add_HandleCreated({
         # Dark title bar: attribute 20 on Windows 10 2004+, 19 on 1809-1909.
@@ -335,6 +338,21 @@ function Add-HashBox($parent, $x, $y, $w, $h, $readOnly) {
     if (-not $readOnly) { $panel.Add_Click({ $b.Focus() }.GetNewClosure()) }
 
     return @{ Panel = $panel; Box = $b }
+}
+
+# A pasted line usually carries more than the hash: an "SHA256:" label, the file
+# name, a "*" marker, a trailing newline. Keep the longest run of hex characters
+# rather than every hex character, or the A, 2, 5 and 6 of "SHA256" end up glued
+# in front of the value. Below 8 characters there is nothing to disambiguate, so
+# plain filtering is used and typing one character at a time still works.
+function Get-CleanHex([string]$text) {
+    if ([string]::IsNullOrEmpty($text)) { return '' }
+    $best = ''
+    foreach ($m in [regex]::Matches($text, '[0-9A-Fa-f]{8,}')) {
+        if ($m.Value.Length -gt $best.Length) { $best = $m.Value }
+    }
+    if ($best -eq '') { $best = ($text -replace '[^0-9A-Fa-f]', '') }
+    return $best.ToUpperInvariant()
 }
 
 function Format-Size($bytes) {
@@ -659,32 +677,70 @@ function Show-HashWindow($filePath) {
         $btnAlgo[$a].Add_Click({ & $pick $this.Text }.GetNewClosure())
     }
 
+    # Rewriting the field from inside its own TextChanged fires the handler
+    # again, and the nested pass used to be the only thing left to run the
+    # comparison - which it did not. The flag makes the outer pass the only one
+    # that matters, so a cleaned-up paste is compared exactly like a clean one.
+    $script:Syncing = $false
+
     $boxExpected.Add_TextChanged({
+        if ($script:Syncing) { return }
+
         $raw   = $boxExpected.Text
-        $clean = ($raw -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+        $clean = Get-CleanHex $raw
         if ($raw -cne $clean) {
-            $boxExpected.Text = $clean
-            $boxExpected.Select($clean.Length, 0)
-            return   # this assignment fires the handler again
+            $script:Syncing = $true
+            try {
+                $boxExpected.Text = $clean
+                $boxExpected.Select($boxExpected.TextLength, 0)
+            }
+            finally { $script:Syncing = $false }
         }
 
         # The pasted length decides the algorithm.
         $want = $LenToAlgo[$clean.Length]
         if ($want -and $want -ne $script:Algo) {
-            & $pick $want   # triggers a fresh hash
+            & $pick $want   # triggers a fresh hash, which compares when done
             return
         }
 
         & $compare
     })
 
-    $btnPaste.Add_Click({
-        # Read-only: nothing is ever put back on the clipboard.
-        if ([System.Windows.Forms.Clipboard]::ContainsText()) {
-            $boxExpected.Text = [System.Windows.Forms.Clipboard]::GetText()
+    # Shared by the button and by Ctrl+V. The clipboard is only ever read.
+    $doPaste = {
+        try {
+            $txt = ''
+            if ([System.Windows.Forms.Clipboard]::ContainsText()) {
+                $txt = [System.Windows.Forms.Clipboard]::GetText()
+            }
+            if ([string]::IsNullOrWhiteSpace($txt)) {
+                # Silence here reads as a broken button. Say what happened.
+                & $setBand $colField $null $T.ClipEmpty $colBadT '' $colDim
+            }
+            else {
+                $boxExpected.Text = $txt
+                # Pasting the same value twice raises no TextChanged, so the
+                # comparison is asked for explicitly rather than relied upon.
+                & $compare
+            }
+        }
+        catch {
+            & $setBand $colField $null $T.ClipFailed $colBadT $_.Exception.Message $colDim
         }
         $boxExpected.Focus()
         $boxExpected.Select($boxExpected.TextLength, 0)
+    }
+
+    $btnPaste.Add_Click({ & $doPaste })
+
+    # A RichTextBox would happily paste an image or formatted text into itself.
+    # Ctrl+V is taken over so both routes end up in the same text-only path.
+    $boxExpected.Add_KeyDown({
+        if ($_.Control -and $_.KeyCode -eq [System.Windows.Forms.Keys]::V) {
+            $_.SuppressKeyPress = $true
+            & $doPaste
+        }
     })
 
     $form.Add_DragEnter({
