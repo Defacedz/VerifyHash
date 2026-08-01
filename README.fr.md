@@ -1,6 +1,6 @@
 # VerifyHash
 
-**Vérifiez un fichier téléchargé face à l'empreinte publiée, depuis le menu
+**Vérifiez un fichier téléchargé face au hash publié, depuis le menu
 clic droit de Windows.** Un seul fichier PowerShell, sans dépendance, sans
 droits administrateur.
 
@@ -10,7 +10,7 @@ droits administrateur.
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1-5391FE)
 ![Licence](https://img.shields.io/badge/licence-MIT-green)
 
-<img src="docs/screenshot.png" alt="La fenêtre de vérification, verte, avec une empreinte calculée et une empreinte attendue identiques" width="716">
+<img src="docs/screenshot.png" alt="La fenêtre de vérification, avec un hash calculé et un hash attendu identiques" width="1162">
 
 ## Le problème
 
@@ -19,8 +19,8 @@ Un site publie une somme de contrôle à côté de son téléchargement. Compare
 justement le moins fiable là où ça compte, au milieu de la chaîne.
 
 `Get-FileHash` donne la valeur, mais la comparaison reste à votre charge.
-VerifyHash fait le tout : clic droit sur le fichier, collez l'empreinte
-publiée, la fenêtre passe au vert ou au rouge.
+VerifyHash fait le tout : clic droit sur le fichier, collez le hash publié, le
+bandeau passe au vert ou au rouge.
 
 ## Installation
 
@@ -57,18 +57,22 @@ Ou clic droit sur le fichier → **Propriétés** → cocher **Débloquer** → 
 
 ## Utilisation
 
-Clic droit sur n'importe quel fichier → **Vérifier l'empreinte**.
+Clic droit sur n'importe quel fichier → **Vérifier le hash**.
 
-> Sous Windows 11, l'entrée peut se trouver derrière **Afficher plus
-> d'options**, ou `Maj` + clic droit.
+<img src="docs/context-menu.fr.png" alt="Le menu contextuel de Windows avec l'entrée Vérifier le hash" width="444">
+
+> Sous Windows 11, l'entrée se trouve dans le menu complet, derrière
+> **Afficher plus d'options** ou `Maj` + clic droit. Le menu compact de
+> Windows 11 n'accepte que des entrées fournies par une application
+> empaquetée, ce qu'un simple script ne peut pas être.
 
 Collez la valeur publiée par l'éditeur dans le second champ. La comparaison se
 fait au fil de la saisie, il n'y a pas de bouton à valider.
 
 - **MD5, SHA-1, SHA-256, SHA-512.**
-- **L'algorithme suit l'empreinte collée.** Une valeur de 32 caractères
-  bascule sur MD5, 40 sur SHA-1, 64 sur SHA-256, 128 sur SHA-512. Les boutons
-  d'algorithme ne servent presque jamais.
+- **L'algorithme suit le hash collé.** Une valeur de 32 caractères bascule sur
+  MD5, 40 sur SHA-1, 64 sur SHA-256, 128 sur SHA-512. Les boutons d'algorithme
+  ne servent presque jamais.
 - **Le texte collé est nettoyé.** Espaces, retours à la ligne et préfixes du
   type `SHA256:` sont ignorés, la casse est normalisée — copier une ligne
   entière depuis une page de téléchargement fonctionne.
@@ -78,7 +82,7 @@ fait au fil de la saisie, il n'y a pas de bouton à valider.
   fichier, même sur plusieurs gigaoctets. Changer d'algorithme en cours de
   calcul annule et relance sans attendre.
 - **Déposez un autre fichier sur la fenêtre** pour l'enchaîner.
-- Un bandeau en bas passe au vert si les empreintes correspondent, au rouge
+- Un bandeau en bas passe au vert si les deux hashs correspondent, au rouge
   sinon — lisible à trois mètres.
 - `Échap` ferme la fenêtre.
 
@@ -106,6 +110,12 @@ La clé de registre est supprimée ; le dossier peut ensuite être effacé.
 - Cette clé est écrite via l'API .NET `Microsoft.Win32.Registry` plutôt que
   par `New-Item` : le chemin contient un `*`, interprété comme un joker par le
   fournisseur Registry de PowerShell.
+- L'entrée lance `conhost.exe --headless powershell.exe …`. `powershell.exe`
+  est un programme console : Windows lui crée donc une fenêtre de console, et
+  `-WindowStyle Hidden` ne fait que la masquer après coup — assez longtemps
+  pour qu'un rectangle noir clignote à chaque utilisation. `--headless` donne
+  au processus une pseudo-console sans aucune fenêtre, et l'interface
+  s'affiche normalement.
 - Le hachage lit le fichier par blocs de 4 Mo avec `TransformBlock`, en rendant
   la main à la boucle de messages entre deux blocs. C'est ce qui garde la
   fenêtre réactive sans second thread — et ce qui rend instantanée

@@ -10,7 +10,7 @@ rights.
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1-5391FE)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-<img src="docs/screenshot.png" alt="The verification window, green, showing a computed and an expected SHA-256 that match" width="716">
+<img src="docs/screenshot.png" alt="The verification window showing a computed and an expected SHA-256 that match" width="1162">
 
 ## The problem
 
@@ -59,8 +59,11 @@ Or right-click the file → **Properties** → tick **Unblock** → OK.
 
 Right-click any file → **Verify hash**.
 
-> On Windows 11 the entry may sit behind **Show more options**, or `Shift` +
-> right-click.
+<img src="docs/context-menu.png" alt="The Windows context menu with a Verify hash entry" width="444">
+
+> On Windows 11 the entry sits in the full menu, behind **Show more options**
+> or `Shift` + right-click. The compact Windows 11 menu only accepts entries
+> shipped as a packaged app, which a plain script cannot be.
 
 Paste the value published by the vendor into the second field. The comparison
 runs as you type; there is no button to confirm.
@@ -105,6 +108,11 @@ is removed and the folder can then be deleted.
 - That key is written through the .NET `Microsoft.Win32.Registry` API rather
   than `New-Item`. The path contains a `*`, which the PowerShell Registry
   provider would treat as a wildcard.
+- The entry runs `conhost.exe --headless powershell.exe …`. `powershell.exe`
+  is a console program, so Windows gives it a console window and
+  `-WindowStyle Hidden` only hides it after the fact — long enough to flash
+  black on screen at every use. `--headless` gives the process a pseudo
+  console with no window at all, and the interface still appears normally.
 - Hashing reads the file in 4 MB chunks through `TransformBlock`, pumping the
   message loop between chunks. That is what keeps the window responsive
   without a second thread — and what makes cancelling a 10 GB hash instant.

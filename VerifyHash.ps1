@@ -117,6 +117,7 @@ $Strings = @{
         InstallTitle  = 'VerifyHash — installation'
         InstallIntro  = 'Adds "Verify hash" to the right-click menu of every file.'
         ScriptPath    = 'LOCATION OF THIS SCRIPT'
+        Status        = 'STATUS'
         NotInstalled  = 'Not installed'
         UpToDate      = 'Installed and up to date'
         Stale         = "Installed, but pointing at another location.`nClick Install to update it."
@@ -126,28 +127,29 @@ $Strings = @{
         Failed        = 'Failed: {0}'
     }
     fr = @{
-        MenuLabel     = "Vérifier l'empreinte"
+        MenuLabel     = 'Vérifier le hash'
         AppTitle      = 'VerifyHash'
         Algorithm     = 'ALGORITHME'
-        Computed      = 'EMPREINTE CALCULÉE'
-        Expected      = 'EMPREINTE ATTENDUE — collez-la ici'
+        Computed      = 'HASH CALCULÉ'
+        Expected      = 'HASH ATTENDU — collez-le ici'
         Paste         = 'Coller'
         Hint          = 'Échap ferme la fenêtre   ·   déposez-y un autre fichier pour le vérifier'
         Computing     = 'Calcul en cours…'
-        AwaitExpected = "En attente de l'empreinte attendue"
+        AwaitExpected = 'En attente du hash attendu'
         Typing        = 'Concordant jusqu''ici — {0} caractères sur {1}'
         Match         = 'IDENTIQUE — le fichier est intact'
         MatchDetail   = '{0} caractères, correspondance totale ({1}).'
         DiffTitle     = 'DIFFÉRENT — {0} caractère(s) en écart'
         AllDiffTitle  = 'TOTALEMENT DIFFÉRENT'
-        AllDiffNote   = "aucun caractère ne correspond : mauvais fichier, ou empreinte issue d'une autre version"
+        AllDiffNote   = "aucun caractère ne correspond : mauvais fichier, ou hash issu d'une autre version"
         Positions     = 'position(s) : {0}'
         LengthNote    = 'longueur {0} au lieu de {1}'
         ReadFailed    = 'Lecture impossible'
         OpenFailed    = "Fichier illisible :`n{0}"
         InstallTitle  = 'VerifyHash — installation'
-        InstallIntro  = "Ajoute « Vérifier l'empreinte » au menu clic droit de tous les fichiers."
+        InstallIntro  = "Ajoute « Vérifier le hash » au menu clic droit de tous les fichiers."
         ScriptPath    = 'EMPLACEMENT DE CE SCRIPT'
+        Status        = 'ÉTAT'
         NotInstalled  = 'Non installé'
         UpToDate      = 'Installé et à jour'
         Stale         = "Installé, mais pointe vers un autre emplacement.`nCliquez sur Installer pour corriger."
@@ -167,20 +169,23 @@ $T = $Strings[$Language]
 
 function RGB([int]$r, [int]$g, [int]$b) { [System.Drawing.Color]::FromArgb($r, $g, $b) }
 
-$colBg      = RGB  21  23  26     # window, idle
-$colBgOk    = RGB  19  38  27     # window, hashes match
-$colBgBad   = RGB  40  21  23     # window, hashes differ
-$colField   = RGB  28  31  36
-$colLine    = RGB  42  47  54
-$colFg      = RGB 230 232 235
-$colDim     = RGB 139 146 155
-$colBandOk  = RGB  30 122  70
-$colBandBad = RGB 163  42  46
-$colDiff    = RGB 255 107 107
-$colMatch   = RGB  85 217 141
-$colBtn     = RGB  42  47  54
-$colBtnHot  = RGB  56  63  72
-$colAccent  = RGB  56 110 186
+$colBg      = RGB  34  35  42    # surface
+$colField   = RGB  26  27  33    # inset fields, one step below the surface
+$colSel     = RGB  30  43  36    # selected / match
+$colSelBad  = RGB  45  29  32    # selected / mismatch
+$colFg      = RGB 201 206 214
+$colDim     = RGB 122 128 144
+$colLine    = RGB  42  45  54
+$colAccent  = RGB 111 207 151    # accent bars
+$colAccentT = RGB 143 227 176    # accent text
+$colBad     = RGB 255  80 110
+$colBadT    = RGB 255 130 150
+$colBorder  = RGB  80 116  98    # surface blended 42% toward the accent
+$colScan    = [System.Drawing.Color]::FromArgb(12, 255, 255, 255)
+
+$brAccent = New-Object System.Drawing.SolidBrush($colAccent)
+$brBad    = New-Object System.Drawing.SolidBrush($colBad)
+$brScan   = New-Object System.Drawing.SolidBrush($colScan)
 
 # All layout numbers below are written for 96 DPI and scaled through Px().
 $Scale = 1.0
@@ -202,11 +207,21 @@ function New-Font([string[]]$families, [double]$size, [System.Drawing.FontStyle]
 $reg  = [System.Drawing.FontStyle]::Regular
 $bold = [System.Drawing.FontStyle]::Bold
 
-$fontMono   = New-Font @('Cascadia Mono', 'Consolas', 'Courier New') 11   $reg
-$fontUi     = New-Font @('Segoe UI Variable Text', 'Segoe UI')        9.5 $reg
-$fontHead   = New-Font @('Segoe UI Variable Text', 'Segoe UI')        8.5 $bold
-$fontFile   = New-Font @('Segoe UI Variable Display', 'Segoe UI')     11  $bold
-$fontStatus = New-Font @('Segoe UI Variable Display', 'Segoe UI')     13  $bold
+$fontMono   = New-Font @('Consolas', 'Cascadia Mono', 'Courier New') 11  $reg
+$fontHex    = New-Font @('Consolas', 'Cascadia Mono', 'Courier New') 8   $reg
+$fontUi     = New-Font @('Segoe UI Variable Text', 'Segoe UI')       9.5 $reg
+$fontHead   = New-Font @('Segoe UI Variable Text', 'Segoe UI')       8.5 $bold
+$fontFile   = New-Font @('Segoe UI Variable Display', 'Segoe UI')    11  $bold
+$fontStatus = New-Font @('Segoe UI Variable Display', 'Segoe UI')    13  $bold
+
+# Hairline scanlines over a surface, the same 3 px / 4.8% white as the tray menu.
+$paintScan = {
+    param($ctl, $g)
+    $step = [Math]::Max(2, (Px 3))
+    for ($y = 0; $y -lt $ctl.ClientSize.Height; $y += $step) {
+        $g.FillRectangle($brScan, 0, $y, $ctl.ClientSize.Width, 1)
+    }
+}
 
 # --- UI helpers --------------------------------------------------------------
 
@@ -226,14 +241,23 @@ function New-Form($title, $w, $h) {
     $f.MinimizeBox     = $false
     $f.TopMost         = $true
     $f.KeyPreview      = $true
+    $f.DoubleBuffered  = $true
     $f.Add_KeyDown({ if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Escape) { $this.Close() } })
     $f.Add_HandleCreated({
-        # Dark title bar. Attribute 20 on Windows 10 2004+, 19 on 1809-1909,
-        # and simply ignored on anything older.
+        # Dark title bar: attribute 20 on Windows 10 2004+, 19 on 1809-1909.
+        # Rounded corners: attribute 33, only understood by Windows 11.
         $on = 1
         foreach ($attr in 20, 19) {
             [void][VH.Native]::DwmSetWindowAttribute($this.Handle, $attr, [ref]$on, 4)
         }
+        $round = 2   # DWMWCP_ROUND
+        [void][VH.Native]::DwmSetWindowAttribute($this.Handle, 33, [ref]$round, 4)
+    })
+    $f.Add_Paint({
+        & $paintScan $this $_.Graphics
+        $pen = New-Object System.Drawing.Pen($colBorder)
+        $_.Graphics.DrawRectangle($pen, 0, 0, $this.ClientSize.Width - 1, $this.ClientSize.Height - 1)
+        $pen.Dispose()
     })
     $f.Add_Shown({ $this.Activate(); $this.BringToFront() })
     return $f
@@ -251,26 +275,42 @@ function Add-Label($parent, $text, $x, $y, $w, $h, $font, $color) {
     return $l
 }
 
+# Right-aligned hex marker, the small Consolas detail the tray menu uses.
+function Add-Hex($parent, $text, $right, $y, $w) {
+    $l           = New-Object System.Windows.Forms.Label
+    $l.Text      = $text
+    $l.Location  = New-Object System.Drawing.Point((Px ($right - $w)), (Px $y))
+    $l.Size      = New-Object System.Drawing.Size((Px $w), (Px 14))
+    $l.Font      = $fontHex
+    $l.ForeColor = $colDim
+    $l.TextAlign = 'MiddleRight'
+    $l.BackColor = [System.Drawing.Color]::Transparent
+    $parent.Controls.Add($l)
+    return $l
+}
+
 function Add-Button($parent, $text, $x, $y, $w, $h) {
     $b           = New-Object System.Windows.Forms.Button
     $b.Text      = $text
     $b.Location  = New-Object System.Drawing.Point((Px $x), (Px $y))
     $b.Size      = New-Object System.Drawing.Size((Px $w), (Px $h))
     $b.FlatStyle = 'Flat'
-    $b.BackColor = $colBtn
+    $b.BackColor = $colBg
     $b.ForeColor = $colFg
-    $b.FlatAppearance.BorderSize         = 0
-    $b.FlatAppearance.MouseOverBackColor = $colBtnHot
-    $b.FlatAppearance.MouseDownBackColor = $colLine
+    $b.Font      = $fontUi
+    $b.FlatAppearance.BorderSize          = 1
+    $b.FlatAppearance.BorderColor         = $colLine
+    $b.FlatAppearance.MouseOverBackColor  = $colSel
+    $b.FlatAppearance.MouseDownBackColor  = $colLine
     $b.UseVisualStyleBackColor = $false
     $parent.Controls.Add($b)
     return $b
 }
 
-# A borderless RichTextBox inset in a panel: the panel supplies the padding and
-# the background, which a RichTextBox cannot do on its own.
+# A borderless RichTextBox inset in a panel: the panel supplies the padding, the
+# background and the 2 px accent bar, none of which a RichTextBox can do itself.
 function Add-HashBox($parent, $x, $y, $w, $h, $readOnly) {
-    $pad = 10
+    $pad = 14
 
     $panel           = New-Object System.Windows.Forms.Panel
     $panel.Location  = New-Object System.Drawing.Point((Px $x), (Px $y))
@@ -294,7 +334,7 @@ function Add-HashBox($parent, $x, $y, $w, $h, $readOnly) {
     # Clicking anywhere in the padding still lands in the field.
     if (-not $readOnly) { $panel.Add_Click({ $b.Focus() }.GetNewClosure()) }
 
-    return $b
+    return @{ Panel = $panel; Box = $b }
 }
 
 function Format-Size($bytes) {
@@ -316,13 +356,21 @@ function Get-InstalledCommand {
     return $v
 }
 
+function Get-LaunchCommand($scriptPath) {
+    # Launched through conhost --headless, not powershell.exe directly:
+    # powershell.exe is a console program, so Windows creates a console window
+    # for it and -WindowStyle Hidden only hides it afterwards - long enough to
+    # flash on screen at every use. --headless gives the process a pseudo
+    # console with no window at all, and the WinForms window still shows.
+    return 'conhost.exe --headless powershell.exe -Sta -NoProfile -ExecutionPolicy Bypass -File "{0}" "%1"' -f $scriptPath
+}
+
 function Install-ContextMenu($scriptPath) {
-    $cmd = 'powershell.exe -Sta -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" "%1"' -f $scriptPath
     $k = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($RegPath)
     $k.SetValue('', $T.MenuLabel)
     $k.SetValue('Icon', 'powershell.exe')
     $c = $k.CreateSubKey('command')
-    $c.SetValue('', $cmd)
+    $c.SetValue('', (Get-LaunchCommand $scriptPath))
     $c.Close()
     $k.Close()
 }
@@ -344,6 +392,7 @@ function Show-HashWindow($filePath) {
     $script:Abort    = $false
     $script:Pending  = $false
     $script:Closing  = $false
+    $script:BandBar  = $null
 
     $W = 760
 
@@ -359,25 +408,37 @@ function Show-HashWindow($filePath) {
     # system's white background whatever BackColor says, which no dark theme
     # survives.
     Add-Label $form $T.Algorithm 24 58 300 16 $fontHead $colDim | Out-Null
+    Add-Hex   $form '0x00A0' ($W - 24) 58 70 | Out-Null
+
     $algos   = @('MD5', 'SHA1', 'SHA256', 'SHA512')
     $btnAlgo = @{}
     for ($i = 0; $i -lt $algos.Count; $i++) {
-        $btnAlgo[$algos[$i]] = Add-Button $form $algos[$i] (24 + $i * 78) 78 72 30
+        $b = Add-Button $form $algos[$i] (24 + $i * 78) 78 72 30
+        $b.Add_Paint({
+            param($s, $e)
+            if ($s.Text -eq $script:Algo) {
+                $e.Graphics.FillRectangle($brAccent, 0, (Px 6), (Px 2), $s.Height - (Px 12))
+            }
+        })
+        $btnAlgo[$algos[$i]] = $b
     }
 
     $syncAlgo = {
         foreach ($a in $algos) {
             $b = $btnAlgo[$a]
             if ($a -eq $script:Algo) {
-                $b.BackColor = $colAccent
-                $b.ForeColor = [System.Drawing.Color]::White
-                $b.FlatAppearance.MouseOverBackColor = $colAccent
+                # No border on the active one: the 2 px accent bar carries it,
+                # the way the tray menu marks its hovered entry.
+                $b.BackColor = $colSel
+                $b.ForeColor = $colAccentT
+                $b.FlatAppearance.BorderColor = $colSel
             }
             else {
-                $b.BackColor = $colBtn
+                $b.BackColor = $colBg
                 $b.ForeColor = $colDim
-                $b.FlatAppearance.MouseOverBackColor = $colBtnHot
+                $b.FlatAppearance.BorderColor = $colLine
             }
+            $b.Invalidate()
         }
     }
     & $syncAlgo
@@ -390,10 +451,14 @@ function Show-HashWindow($filePath) {
     $form.Controls.Add($bar)
 
     Add-Label $form $T.Computed 24 130 400 16 $fontHead $colDim | Out-Null
-    $boxComputed = Add-HashBox $form 24 150 ($W - 48) 40 $true
+    Add-Hex   $form '0x01A4' ($W - 24) 130 70 | Out-Null
+    $computed    = Add-HashBox $form 24 150 ($W - 48) 40 $true
+    $boxComputed = $computed.Box
 
     Add-Label $form $T.Expected 24 206 400 16 $fontHead $colDim | Out-Null
-    $boxExpected = Add-HashBox $form 24 226 ($W - 152) 40 $false
+    Add-Hex   $form '0x02F0' ($W - 24) 206 70 | Out-Null
+    $expected    = Add-HashBox $form 24 226 ($W - 152) 40 $false
+    $boxExpected = $expected.Box
     $btnPaste    = Add-Button  $form $T.Paste ($W - 120) 226 96 40
 
     $band           = New-Object System.Windows.Forms.Panel
@@ -401,6 +466,16 @@ function Show-HashWindow($filePath) {
     $band.Size      = New-Object System.Drawing.Size((Px $W), (Px 74))
     $band.BackColor = $colField
     $form.Controls.Add($band)
+    $band.Add_Paint({
+        param($s, $e)
+        & $paintScan $s $e.Graphics
+        if ($script:BandBar) {
+            $e.Graphics.FillRectangle($script:BandBar, 0, 0, (Px 2), $s.ClientSize.Height)
+        }
+        $pen = New-Object System.Drawing.Pen($colLine)
+        $e.Graphics.DrawLine($pen, 0, 0, $s.ClientSize.Width, 0)
+        $pen.Dispose()
+    })
 
     $lblStatus = Add-Label $band '' 24  12 ($W - 48) 26 $fontStatus $colDim
     $lblDetail = Add-Label $band '' 24  42 ($W - 48) 22 $fontUi     $colDim
@@ -412,64 +487,65 @@ function Show-HashWindow($filePath) {
         param($box, $idx, $allGood)
         $sel = $box.SelectionStart
         $box.SelectAll()
-        $box.SelectionColor = if ($allGood) { $colMatch } else { $colFg }
+        $box.SelectionColor = if ($allGood) { $colAccentT } else { $colFg }
         foreach ($i in $idx) {
             if ($i -lt $box.TextLength) {
                 $box.Select($i, 1)
-                $box.SelectionColor = $colDiff
+                $box.SelectionColor = $colBad
             }
         }
         $box.Select($sel, 0)
     }
 
     $setBand = {
-        param($bg, $band2, $status, $statusColor, $detail)
-        $form.BackColor      = $bg
-        $band.BackColor      = $band2
+        param($bg, $bar2, $status, $statusColor, $detail, $detailColor)
+        $band.BackColor      = $bg
+        $script:BandBar      = $bar2
         $lblStatus.ForeColor = $statusColor
         $lblStatus.Text      = $status
+        $lblDetail.ForeColor = $detailColor
         $lblDetail.Text      = $detail
+        $band.Invalidate()
     }
 
     $compare = {
-        $expected = ($boxExpected.Text -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
-        $computed = $script:Computed
+        $exp      = ($boxExpected.Text -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+        $computedHash = $script:Computed
         $diff     = New-Object System.Collections.ArrayList
 
-        if ($computed -eq '' -or $expected.Length -eq 0) {
-            $msg = if ($computed -eq '') { $T.Computing } else { $T.AwaitExpected }
-            & $setBand $colBg $colField $msg $colDim ''
+        if ($computedHash -eq '' -or $exp.Length -eq 0) {
+            $msg = if ($computedHash -eq '') { $T.Computing } else { $T.AwaitExpected }
+            & $setBand $colField $null $msg $colDim '' $colDim
             & $paint $boxComputed $diff $false
             & $paint $boxExpected $diff $false
             return
         }
 
-        $n = [Math]::Min($expected.Length, $computed.Length)
+        $n = [Math]::Min($exp.Length, $computedHash.Length)
         for ($i = 0; $i -lt $n; $i++) {
-            if ($expected[$i] -ne $computed[$i]) { [void]$diff.Add($i) }
+            if ($exp[$i] -ne $computedHash[$i]) { [void]$diff.Add($i) }
         }
-        $lenDelta = $expected.Length - $computed.Length
+        $lenDelta = $exp.Length - $computedHash.Length
 
         # Still being typed and correct so far: stay neutral rather than
         # flashing red on every keystroke.
         if ($diff.Count -eq 0 -and $lenDelta -lt 0) {
-            & $setBand $colBg $colField ($T.Typing -f $expected.Length, $computed.Length) $colDim ''
+            & $setBand $colField $null ($T.Typing -f $exp.Length, $computedHash.Length) $colDim '' $colDim
             & $paint $boxComputed $diff $false
             & $paint $boxExpected $diff $false
             return
         }
 
         if ($diff.Count -eq 0 -and $lenDelta -eq 0) {
-            & $setBand $colBgOk $colBandOk $T.Match ([System.Drawing.Color]::White) `
-                ($T.MatchDetail -f $computed.Length, $script:Algo)
-            $lblDetail.ForeColor = RGB 205 240 218
+            & $setBand $colSel $brAccent $T.Match $colAccentT `
+                ($T.MatchDetail -f $computedHash.Length, $script:Algo) $colAccent
             & $paint $boxComputed $diff $true
             & $paint $boxExpected $diff $true
             return
         }
 
         $notes = @()
-        if ($lenDelta -ne 0) { $notes += $T.LengthNote -f $expected.Length, $computed.Length }
+        if ($lenDelta -ne 0) { $notes += $T.LengthNote -f $exp.Length, $computedHash.Length }
 
         if ($n -gt 0 -and $diff.Count -eq $n) {
             $title = $T.AllDiffTitle
@@ -482,8 +558,7 @@ function Show-HashWindow($filePath) {
             $notes += $T.Positions -f "$($first -join ', ')$suite"
         }
 
-        & $setBand $colBgBad $colBandBad $title ([System.Drawing.Color]::White) ($notes -join '   ·   ')
-        $lblDetail.ForeColor = RGB 255 214 214
+        & $setBand $colSelBad $brBad $title $colBadT ($notes -join '   ·   ') $colBad
         & $paint $boxComputed $diff $false
         & $paint $boxExpected $diff $false
     }
@@ -526,8 +601,7 @@ function Show-HashWindow($filePath) {
             }
         }
         catch {
-            & $setBand $colBgBad $colBandBad $T.ReadFailed ([System.Drawing.Color]::White) $_.Exception.Message
-            $lblDetail.ForeColor = RGB 255 214 214
+            & $setBand $colSelBad $brBad $T.ReadFailed $colBadT $_.Exception.Message $colBad
         }
         finally {
             if ($fs)   { $fs.Dispose() }
@@ -641,44 +715,92 @@ function Show-Installer {
     $self = $PSCommandPath
     if ([string]::IsNullOrWhiteSpace($self)) { $self = $MyInvocation.MyCommand.Path }
 
+    $script:StateBar = $null
     $W = 620
 
-    $form = New-Form $T.InstallTitle $W 268
+    $form = New-Form $T.InstallTitle $W 300
 
     Add-Label $form $T.InstallIntro 24 22 ($W - 48) 22 $fontFile $colFg  | Out-Null
-    Add-Label $form $T.ScriptPath   24 62 ($W - 48) 16 $fontHead $colDim | Out-Null
+
+    Add-Label $form $T.ScriptPath 24 62 ($W - 120) 16 $fontHead $colDim | Out-Null
+    Add-Hex   $form '0x01A4' ($W - 24) 62 70 | Out-Null
 
     $pathPanel           = New-Object System.Windows.Forms.Panel
     $pathPanel.Location  = New-Object System.Drawing.Point((Px 24), (Px 82))
     $pathPanel.Size      = New-Object System.Drawing.Size((Px ($W - 48)), (Px 40))
     $pathPanel.BackColor = $colField
     $form.Controls.Add($pathPanel)
-    Add-Label $pathPanel $self 10 11 ($W - 68) 20 $fontUi $colFg | Out-Null
+    Add-Label $pathPanel $self 14 11 ($W - 76) 20 $fontUi $colFg | Out-Null
 
-    $lblState = Add-Label $form '' 24 138 ($W - 48) 44 $fontStatus $colDim
+    Add-Label $form $T.Status 24 138 ($W - 120) 16 $fontHead $colDim | Out-Null
+    Add-Hex   $form '0xFF00' ($W - 24) 138 70 | Out-Null
+
+    $statePanel           = New-Object System.Windows.Forms.Panel
+    $statePanel.Location  = New-Object System.Drawing.Point((Px 24), (Px 158))
+    $statePanel.Size      = New-Object System.Drawing.Size((Px ($W - 48)), (Px 56))
+    $statePanel.BackColor = $colField
+    $form.Controls.Add($statePanel)
+    $statePanel.Add_Paint({
+        param($s, $e)
+        & $paintScan $s $e.Graphics
+        if ($script:StateBar) {
+            $e.Graphics.FillRectangle($script:StateBar, 0, 0, (Px 2), $s.ClientSize.Height)
+        }
+    })
+    $lblState = Add-Label $statePanel '' 14 6 ($W - 76) 44 $fontStatus $colDim
 
     $btnW = [int](($W - 48 - 24) / 3)
-    $btnIn  = Add-Button $form $T.BtnInstall   24                    198 $btnW 40
-    $btnIn.BackColor = $colAccent
-    $btnIn.ForeColor = [System.Drawing.Color]::White
-    $btnIn.FlatAppearance.MouseOverBackColor = RGB 72 128 205
-    $btnOut = Add-Button $form $T.BtnUninstall (24 + $btnW + 12)     198 $btnW 40
-    $btnEnd = Add-Button $form $T.BtnClose     (24 + 2 * $btnW + 24) 198 $btnW 40
+    $btnIn  = Add-Button $form $T.BtnInstall   24                    236 $btnW 40
+    $btnOut = Add-Button $form $T.BtnUninstall (24 + $btnW + 12)     236 $btnW 40
+    $btnEnd = Add-Button $form $T.BtnClose     (24 + 2 * $btnW + 24) 236 $btnW 40
+
+    $style = {
+        param($b, $enabled, $primary)
+        $b.Enabled = $enabled
+        if (-not $enabled) {
+            $b.BackColor = $colBg
+            $b.ForeColor = $colLine
+            $b.FlatAppearance.BorderColor = $colLine
+        }
+        elseif ($primary) {
+            $b.BackColor = $colSel
+            $b.ForeColor = $colAccentT
+            $b.FlatAppearance.BorderColor = $colAccent
+        }
+        else {
+            $b.BackColor = $colBg
+            $b.ForeColor = $colFg
+            $b.FlatAppearance.BorderColor = $colLine
+        }
+    }
 
     $refresh = {
         $cur = Get-InstalledCommand
+        $want = Get-LaunchCommand $self
+
         if ($null -eq $cur) {
             $lblState.Text      = $T.NotInstalled
             $lblState.ForeColor = $colDim
+            $script:StateBar    = $null
+            & $style $btnIn  $true  $true
+            & $style $btnOut $false $false
         }
-        elseif ($cur -like "*$self*") {
+        elseif ($cur -eq $want) {
             $lblState.Text      = $T.UpToDate
-            $lblState.ForeColor = $colMatch
+            $lblState.ForeColor = $colAccentT
+            $script:StateBar    = $brAccent
+            # Already installed and pointing here: nothing left to install.
+            & $style $btnIn  $false $false
+            & $style $btnOut $true  $false
         }
         else {
             $lblState.Text      = $T.Stale
-            $lblState.ForeColor = $colDiff
+            $lblState.ForeColor = $colBadT
+            $script:StateBar    = $brBad
+            & $style $btnIn  $true  $true
+            & $style $btnOut $true  $false
         }
+        $statePanel.Invalidate()
     }
 
     $btnIn.Add_Click({
