@@ -10,7 +10,9 @@ droits administrateur.
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1-5391FE)
 ![Licence](https://img.shields.io/badge/licence-MIT-green)
 
-<img src="docs/screenshot.png" alt="La fenêtre de vérification, avec un hash calculé et un hash attendu identiques" width="1162">
+<img src="docs/context-menu.fr.png" alt="Le menu contextuel de Windows avec l'entrée Vérifier le hash" width="380">
+
+<img src="docs/screenshot.png" alt="La fenêtre de vérification, avec un hash calculé et un hash attendu identiques" width="1000">
 
 ## Le problème
 
@@ -59,8 +61,6 @@ Ou clic droit sur le fichier → **Propriétés** → cocher **Débloquer** → 
 
 Clic droit sur n'importe quel fichier → **Vérifier le hash**.
 
-<img src="docs/context-menu.fr.png" alt="Le menu contextuel de Windows avec l'entrée Vérifier le hash" width="444">
-
 > Sous Windows 11, l'entrée se trouve dans le menu complet, derrière
 > **Afficher plus d'options** ou `Maj` + clic droit. Le menu compact de
 > Windows 11 n'accepte que des entrées fournies par une application
@@ -77,7 +77,9 @@ fait au fil de la saisie, il n'y a pas de bouton à valider.
   type `SHA256:` sont ignorés, la casse est normalisée — copier une ligne
   entière depuis une page de téléchargement fonctionne.
 - **Les écarts sont surlignés** dans les deux champs, avec leur position : de
-  quoi distinguer un copier-coller tronqué d'un fichier réellement différent.
+  quoi distinguer un copier-coller tronqué d'un fichier réellement différent :
+
+  <img src="docs/screenshot-mismatch.png" alt="La fenêtre de vérification avec six caractères en écart, surlignés en rouge dans les deux champs" width="1000">
 - **La fenêtre s'affiche immédiatement** et une barre suit la lecture du
   fichier, même sur plusieurs gigaoctets. Changer d'algorithme en cours de
   calcul annule et relance sans attendre.
