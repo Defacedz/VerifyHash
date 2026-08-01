@@ -14,6 +14,8 @@ rights.
 
 <img src="docs/screenshot.png" alt="The verification window showing a computed and an expected SHA-256 that match" width="1000">
 
+<img src="docs/screenshot-mismatch.png" alt="The verification window after pasting another file's hash: 58 of the 64 characters differ, highlighted in red in both fields" width="1000">
+
 ## The problem
 
 A project publishes a checksum next to its download. Comparing 64 hexadecimal
@@ -75,10 +77,11 @@ runs as you type; there is no button to confirm.
 - **Pasted text is cleaned up.** Spaces, line breaks and prefixes such as
   `SHA256:` are dropped, and the case is normalised — copying a whole line off
   a download page works.
-- **Differences are highlighted** in both fields, with their positions, so you
-  can tell a truncated paste from a genuinely different file:
-
-  <img src="docs/screenshot-mismatch.png" alt="The verification window with six characters differing, highlighted in red in both fields" width="1000">
+- **Differences are highlighted** in both fields, with their positions. A hash
+  avalanches: one changed byte in the file flips about half the output bits, so
+  a genuinely different file differs on roughly 15 of every 16 characters. A
+  handful of differences instead means the copy went wrong — a truncated paste,
+  a line read off the wrong row — and the window says so.
 - **The window appears instantly** and a progress bar moves while the file is
   read, even on several gigabytes. Switching algorithm mid-hash cancels and
   restarts immediately.

@@ -108,8 +108,9 @@ $Strings = @{
         Match         = 'MATCH — the file is intact'
         MatchDetail   = '{0} characters, exact match ({1}).'
         DiffTitle     = 'DIFFERENT — {0} character(s) do not match'
-        AllDiffTitle  = 'COMPLETELY DIFFERENT'
-        AllDiffNote   = 'not one character matches: wrong file, or a hash taken from another version'
+        AllDiffTitle  = 'DIFFERENT — not the same file'
+        AllDiffNote   = '{0} of {1} characters differ: a single changed byte rewrites the whole hash'
+        FewDiffNote   = 'so few differences point at the copy, not at the file'
         Positions     = 'position(s): {0}'
         LengthNote    = 'length {0} instead of {1}'
         ReadFailed    = 'Could not read the file'
@@ -142,8 +143,9 @@ $Strings = @{
         Match         = 'IDENTIQUE — le fichier est intact'
         MatchDetail   = '{0} caractères, correspondance totale ({1}).'
         DiffTitle     = 'DIFFÉRENT — {0} caractère(s) en écart'
-        AllDiffTitle  = 'TOTALEMENT DIFFÉRENT'
-        AllDiffNote   = "aucun caractère ne correspond : mauvais fichier, ou hash issu d'une autre version"
+        AllDiffTitle  = "DIFFÉRENT — ce n'est pas le même fichier"
+        AllDiffNote   = '{0} caractères sur {1} diffèrent : un seul octet modifié réécrit tout le hash'
+        FewDiffNote   = "aussi peu d'écarts désignent le copier-coller, pas le fichier"
         Positions     = 'position(s) : {0}'
         LengthNote    = 'longueur {0} au lieu de {1}'
         ReadFailed    = 'Lecture impossible'
@@ -565,15 +567,22 @@ function Show-HashWindow($filePath) {
         $notes = @()
         if ($lenDelta -ne 0) { $notes += $T.LengthNote -f $exp.Length, $computedHash.Length }
 
-        if ($n -gt 0 -and $diff.Count -eq $n) {
+        # A hash avalanches: one changed byte in the file flips about half the
+        # output bits, so a genuinely different file differs on roughly 15 of
+        # every 16 hex characters. Demanding that every single one differ was
+        # near impossible - (15/16)^64 is under 2% - and that branch almost
+        # never fired. The split is made on the proportion instead; below it,
+        # the cause is a bad copy rather than a different file.
+        if ($n -ge 8 -and $diff.Count -ge $n * 0.4) {
             $title = $T.AllDiffTitle
-            $notes += $T.AllDiffNote
+            $notes += $T.AllDiffNote -f $diff.Count, $n
         }
         else {
             $title = $T.DiffTitle -f $diff.Count
             $first = ($diff | Select-Object -First 6) | ForEach-Object { $_ + 1 }
             $suite = if ($diff.Count -gt 6) { ', …' } else { '' }
             $notes += $T.Positions -f "$($first -join ', ')$suite"
+            if ($lenDelta -eq 0) { $notes += $T.FewDiffNote }
         }
 
         & $setBand $colSelBad $brBad $title $colBadT ($notes -join '   ·   ') $colBad

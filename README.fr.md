@@ -14,6 +14,8 @@ droits administrateur.
 
 <img src="docs/screenshot.png" alt="La fenêtre de vérification, avec un hash calculé et un hash attendu identiques" width="1000">
 
+<img src="docs/screenshot-mismatch.png" alt="La fenêtre de vérification après avoir collé le hash d'un autre fichier : 58 caractères sur 64 diffèrent, surlignés en rouge dans les deux champs" width="1000">
+
 ## Le problème
 
 Un site publie une somme de contrôle à côté de son téléchargement. Comparer
@@ -76,10 +78,12 @@ fait au fil de la saisie, il n'y a pas de bouton à valider.
 - **Le texte collé est nettoyé.** Espaces, retours à la ligne et préfixes du
   type `SHA256:` sont ignorés, la casse est normalisée — copier une ligne
   entière depuis une page de téléchargement fonctionne.
-- **Les écarts sont surlignés** dans les deux champs, avec leur position : de
-  quoi distinguer un copier-coller tronqué d'un fichier réellement différent :
-
-  <img src="docs/screenshot-mismatch.png" alt="La fenêtre de vérification avec six caractères en écart, surlignés en rouge dans les deux champs" width="1000">
+- **Les écarts sont surlignés** dans les deux champs, avec leur position. Un
+  hash a un effet avalanche : un seul octet modifié dans le fichier fait
+  basculer environ la moitié des bits de sortie, donc un fichier réellement
+  différent diffère sur à peu près 15 caractères sur 16. Quelques écarts
+  seulement désignent au contraire un copier-coller raté — valeur tronquée,
+  ligne prise sur la mauvaise entrée — et la fenêtre le dit.
 - **La fenêtre s'affiche immédiatement** et une barre suit la lecture du
   fichier, même sur plusieurs gigaoctets. Changer d'algorithme en cours de
   calcul annule et relance sans attendre.
